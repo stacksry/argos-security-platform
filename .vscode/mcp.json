@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "argos": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "argos.mcp.server"],
+      "env": {
+        "ANTHROPIC_API_KEY": "${env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
