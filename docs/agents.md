@@ -51,11 +51,11 @@ class AgentResult:
 
 ---
 
-## Discovery Tier
+## Radar Tier
 
 ### Navigator
 
-**File:** `argos/agents/discovery/navigator.py`
+**File:** `argos/agents/radar/navigator.py`
 **Kafka trigger:** `argos.scan.requested`
 **Purpose:** The central router. Classifies changed files by asset type and calls Claude to decide which downstream agents to activate.
 
@@ -86,7 +86,7 @@ class AgentResult:
 
 ### Oracle
 
-**File:** `argos/agents/discovery/oracle.py`
+**File:** `argos/agents/radar/oracle.py`
 **Kafka trigger:** Schedule (every `CVE_POLL_INTERVAL_HOURS` hours) + `argos.cve.published`
 **Purpose:** Fetches new CVEs from NVD and the CISA KEV list. Correlates them with org assets via the Neo4j dependency graph.
 
@@ -109,7 +109,7 @@ class AgentResult:
 
 ### Cartographer
 
-**File:** `argos/agents/discovery/cartographer.py`
+**File:** `argos/agents/radar/cartographer.py`
 **Kafka trigger:** `argos.pr.merged` + manual scan
 **Purpose:** Parses dependency manifests and builds/updates the Neo4j knowledge graph.
 
@@ -135,7 +135,7 @@ class AgentResult:
 
 ### Archaeologist
 
-**File:** `argos/agents/discovery/archaeologist.py`
+**File:** `argos/agents/radar/archaeologist.py`
 **Kafka trigger:** `argos.blast.radius`
 **Purpose:** Traces which commit introduced a vulnerability. Detects regression patterns (fix-then-revert).
 
@@ -160,7 +160,7 @@ class AgentResult:
 
 ### Genealogist
 
-**File:** `argos/agents/discovery/genealogist.py`
+**File:** `argos/agents/radar/genealogist.py`
 **Kafka trigger:** Called by Navigator for repos with manifest changes
 **Purpose:** Scores supply chain trust for each dependency.
 

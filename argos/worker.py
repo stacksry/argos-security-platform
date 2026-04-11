@@ -36,10 +36,10 @@ from argos.memory.store import ArgosMemory
 from argos.ingestion.kafka_producer import ArgosProducer
 
 # ── Agents ────────────────────────────────────────────────────────────────────
-from argos.agents.discovery.navigator import NavigatorAgent
-from argos.agents.discovery.oracle import OracleAgent
-from argos.agents.discovery.archaeologist import ArchaeologistAgent
-from argos.agents.discovery.cartographer import CartographerAgent
+from argos.agents.radar.navigator import NavigatorAgent
+from argos.agents.radar.oracle import OracleAgent
+from argos.agents.radar.archaeologist import ArchaeologistAgent
+from argos.agents.radar.cartographer import CartographerAgent
 from argos.agents.software.sentinel import SentinelAgent
 from argos.agents.software.architect import ArchitectAgent
 

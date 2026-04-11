@@ -41,7 +41,7 @@ ARGOS is built on three architectural principles:
                                                Kafka Topics
                                                       │
 ┌─────────────────────────────────────────────────────▼───────────────────┐
-│                      Discovery Tier                                     │
+│                        Radar Tier                                       │
 │  Navigator ◄── argos.scan.requested    (routes to downstream agents)   │
 │  Oracle    ◄── argos.cve.published     (correlates CVEs with assets)   │
 │  Cartographer ◄── argos.pr.merged      (updates dependency graph)      │
@@ -144,7 +144,7 @@ class AgentResult:
     tokens_used: int
 ```
 
-### Discovery tier
+### Radar tier
 
 | Agent | Trigger | Responsibility |
 |-------|---------|---------------|

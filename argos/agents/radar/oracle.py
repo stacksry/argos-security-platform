@@ -1,5 +1,5 @@
 """
-argos/agents/discovery/oracle.py
+argos/agents/radar/oracle.py
 
 OracleAgent — threat intelligence correlator.
 

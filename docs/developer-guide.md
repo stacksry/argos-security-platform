@@ -44,7 +44,7 @@ argos-security-platform/
 │   │
 │   ├── agents/
 │   │   ├── base.py             # ArgosAgent ABC + AgentResult
-│   │   ├── discovery/          # Navigator, Oracle, Cartographer, Archaeologist, Genealogist
+│   │   ├── radar/              # Navigator, Oracle, Cartographer, Archaeologist, Genealogist
 │   │   ├── software/           # Sentinel, Architect, Auditor
 │   │   ├── hardware/           # Silicon, PCB, Necromancer
 │   │   ├── action/             # Commander, Alchemist, Reporter
@@ -294,7 +294,7 @@ from argos.agents.software.my_agent import MyAgent
 
 ### Step 4 — Register in Navigator's routing table
 
-Add the agent to the routing decision prompt in `argos/agents/discovery/navigator.py`:
+Add the agent to the routing decision prompt in `argos/agents/radar/navigator.py`:
 
 ```python
 AGENT_REGISTRY = {

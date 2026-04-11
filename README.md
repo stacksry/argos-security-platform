@@ -21,9 +21,9 @@ SIEM/SOAR workflows.
 
 | Tier | Agent | Responsibility |
 |------|-------|----------------|
-| **Discovery** | AssetDiscoveryAgent | Network scanning, cloud inventory enumeration |
-| **Discovery** | RepoHarvesterAgent | GitHub / GitLab / Bitbucket crawling, secret scanning |
-| **Discovery** | SBOMAgent | CycloneDX SBOM generation for all discovered components |
+| **Radar** | AssetDiscoveryAgent | Network scanning, cloud inventory enumeration |
+| **Radar** | RepoHarvesterAgent | GitHub / GitLab / Bitbucket crawling, secret scanning |
+| **Radar** | SBOMAgent | CycloneDX SBOM generation for all discovered components |
 | **Software** | VulnAnalysisAgent | CVE correlation, CVSS scoring, exploitability triage |
 | **Software** | CodeAuditAgent | Static analysis, taint tracking, dangerous-pattern detection |
 | **Software** | DependencyAgent | Transitive dependency graph construction and risk scoring |
@@ -123,8 +123,8 @@ BITBUCKET_TOKEN=...
 
 | Topic | Producer | Consumer | Description |
 |-------|----------|----------|-------------|
-| `argos.discovery.assets` | AssetDiscoveryAgent | VulnAnalysisAgent, SBOMAgent | Newly discovered assets |
-| `argos.discovery.repos` | RepoHarvesterAgent | CodeAuditAgent, DependencyAgent | Repository metadata |
+| `argos.radar.assets` | AssetDiscoveryAgent | VulnAnalysisAgent, SBOMAgent | Newly discovered assets |
+| `argos.radar.repos` | RepoHarvesterAgent | CodeAuditAgent, DependencyAgent | Repository metadata |
 | `argos.sbom.generated` | SBOMAgent | VulnAnalysisAgent, DependencyAgent | CycloneDX SBOM payloads |
 | `argos.vulns.found` | VulnAnalysisAgent | PatchingAgent, AlertingAgent, ReportingAgent | Vulnerability findings |
 | `argos.hardware.findings` | FirmwareAgent, HardwareAuditAgent | ThreatIntelAgent, ReportingAgent | Hardware-layer findings |

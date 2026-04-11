@@ -1,5 +1,5 @@
 """
-argos/agents/discovery/navigator.py
+argos/agents/radar/navigator.py
 
 NavigatorAgent — the central event router for the ARGOS platform.
 
@@ -128,10 +128,10 @@ class NavigatorAgent(ArgosAgent):
         "silicon":      "hardware.silicon.SiliconAgent",
         "pcb":          "hardware.pcb.PCBAgent",
         "necromancer":  "hardware.necromancer.NecromancerAgent",
-        "cartographer": "discovery.cartographer.CartographerAgent",
-        "oracle":       "discovery.oracle.OracleAgent",
-        "archaeologist":"discovery.archaeologist.ArchaeologistAgent",
-        "genealogist":  "discovery.genealogist.GeneaologistAgent",
+        "cartographer": "radar.cartographer.CartographerAgent",
+        "oracle":       "radar.oracle.OracleAgent",
+        "archaeologist":"radar.archaeologist.ArchaeologistAgent",
+        "genealogist":  "radar.genealogist.GeneaologistAgent",
         "prophet":      "intelligence.prophet.ProphetAgent",
         "alchemist":    "action.alchemist.AlchemistAgent",
     }

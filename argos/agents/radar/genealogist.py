@@ -1,5 +1,5 @@
 """
-argos/agents/discovery/genealogist.py
+argos/agents/radar/genealogist.py
 
 GeneaologistAgent — supply chain trust scoring.
 

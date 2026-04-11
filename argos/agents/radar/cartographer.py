@@ -1,5 +1,5 @@
 """
-argos/agents/discovery/cartographer.py
+argos/agents/radar/cartographer.py
 
 CartographerAgent — org-wide asset knowledge graph builder and maintainer.
 

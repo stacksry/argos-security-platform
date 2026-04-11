@@ -1,5 +1,5 @@
 """
-argos/agents/discovery/archaeologist.py
+argos/agents/radar/archaeologist.py
 
 ArchaeologistAgent — git history analysis for confirmed security findings.
 
