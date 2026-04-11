@@ -4,6 +4,20 @@
 
 ---
 
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Setup Guide](docs/setup.md) | Prerequisites, Docker quick start, environment config, VS Code Copilot integration, troubleshooting |
+| [Architecture](docs/architecture.md) | Event-driven design, agent tiers, memory system, data flow walkthroughs, Kafka topic reference |
+| [Developer Guide](docs/developer-guide.md) | Project structure, writing new agents, memory APIs, testing, code style |
+| [API Reference](docs/api-reference.md) | All REST endpoints — request/response schemas, auth, webhooks |
+| [Agent Reference](docs/agents.md) | All 17 agents — pipelines, memory reads/writes, tuning guidance |
+| [Configuration](docs/configuration.md) | Every environment variable explained |
+| [UI Mockups](docs/mockups.md) | Persona screens — Security Analyst, Developer, CISO, Auditor, Hardware Engineer |
+
+---
+
 ## Overview
 
 ARGOS is a self-evolving agentic AI security platform built on Anthropic's Claude models. It
