@@ -1,4 +1,4 @@
-# ARGOS — Adaptive Reconnaissance & Guard for Organizational Security
+# ARGOS — Adaptive Radar & Guard for Organizational Security
 
 > A self-evolving, agentic AI security platform that thinks like an attacker and defends like a guardian.
 
