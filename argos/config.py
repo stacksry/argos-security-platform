@@ -21,7 +21,13 @@ class Settings(BaseSettings):
 
     # ── Claude ───────────────────────────────────────────────────────────────
     anthropic_api_key: SecretStr = Field(..., description="Anthropic API key")
+    # Default analysis model. Override via CLAUDE_MODEL_ID env var.
+    # When Glasswing partner access is obtained, set CLAUDE_MYTHOS_MODEL_ID
+    # to the partner endpoint and USE_MYTHOS=true to activate Mythos routing.
     claude_model: str = "claude-opus-4-6"
+    claude_mythos_model_id: str = ""   # Glasswing partner Mythos endpoint
+    claude_haiku_model_id: str = "claude-haiku-4-5-20251001"
+    use_mythos: bool = False           # set USE_MYTHOS=true to activate
 
     # ── Bitbucket ────────────────────────────────────────────────────────────
     bitbucket_mode: Literal["cloud", "datacenter"] = "cloud"

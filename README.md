@@ -29,6 +29,11 @@ correlating signals from every layer of the stack into a unified, queryable inte
 security teams can interrogate via a natural-language interface or integrate directly into existing
 SIEM/SOAR workflows.
 
+ARGOS uses a tiered model routing system anchored to **Claude Opus 4.6** by default, with optional
+routing of deep-semantic reasoning tasks to **Claude Mythos** when Glasswing partner access is
+configured. The Breeder (self-improvement) agent has hardened promotion gates specifically to
+account for Mythos' elevated code generation capability — see [Self-Evolution](#self-evolution).
+
 ---
 
 ## Architecture — Agent Tiers
@@ -103,6 +108,12 @@ Create a `.env` file at the project root (never commit this file):
 
 # ── Anthropic ────────────────────────────────────────────────────
 ANTHROPIC_API_KEY=sk-ant-...
+
+# ── Model routing (optional — defaults to Opus) ──────────────────
+# CLAUDE_MODEL_ID=claude-opus-4-6           # default analysis model
+# CLAUDE_MYTHOS_MODEL_ID=                   # Glasswing partner endpoint
+# CLAUDE_HAIKU_MODEL_ID=claude-haiku-4-5-20251001
+# USE_MYTHOS=false                          # set true for Mythos deep-semantic routing
 
 # ── PostgreSQL / TimescaleDB ─────────────────────────────────────
 POSTGRES_HOST=localhost
@@ -225,7 +236,7 @@ priority-weight matrix that governs how the worker fleet allocates compute. If f
 vulnerabilities are spiking, StrategyAgent raises the scheduling priority of FirmwareAgent and
 HardwareAuditAgent automatically.
 
-**SelfImprovementAgent** goes further: it uses Claude to draft new agent implementations in
+**SelfImprovementAgent (Breeder)** goes further: it uses Claude to draft new agent implementations in
 response to newly discovered attack patterns, runs them in an isolated sandbox environment,
 evaluates their output against a quality rubric, and — if they pass — hot-loads them into the
 running worker fleet without a deployment cycle.
@@ -233,6 +244,42 @@ running worker fleet without a deployment cycle.
 All generated code is committed to a dedicated `agents/generated/` branch for human review.
 The hot-load mechanism is gated by a configurable confidence threshold and can be disabled
 entirely via `ARGOS_SELF_IMPROVE=false` in `.env`.
+
+#### Hardened promotion gates (Mythos)
+
+Because Mythos-generated agent code is substantially more capable, the Breeder's promotion
+pipeline has been tightened to treat it as a **security boundary** rather than just a quality filter:
+
+| Gate | Previous threshold | Current threshold |
+|------|-------------------|-------------------|
+| Minimum scan count | 50 scans | **200 scans** |
+| Minimum precision | > 90% | **> 95%** |
+| Human security review | Not required | **Required** (blocks promotion if absent or denied) |
+| Structural safety check | Syntax only (`ast.parse`) | **AST walk** — blocks imports of `socket`, `subprocess`, `requests`, etc.; blocks `os.system/popen/exec*`; blocks write-mode `open()` calls |
+
+The structural check is a defence-in-depth lint that catches obvious violations quickly. The mandatory
+human security review (recorded in `agent_security_review_log`) is the primary control for subtle
+cases and **fails closed** — if the review record is unreachable, promotion is blocked.
+
+---
+
+## Model Routing
+
+ARGOS routes Claude calls to one of three model tiers based on task type. The `ModelRouter` in
+`argos/agents/base.py` centralises this selection and is used by all agents via `self.model`.
+
+| Tier | Model | Used for |
+|------|-------|----------|
+| `deep_semantic` | Mythos (if `USE_MYTHOS=true`) | High-signal reasoning: triage, novel vuln-class identification |
+| `default` | Opus (`CLAUDE_MODEL_ID`) | Most agents — scanning, fixing, reporting, hardware analysis |
+| `gating` | Haiku (`CLAUDE_HAIKU_MODEL_ID`) | Cheap, high-volume pre-screening (ranker, infra gating) |
+
+**Note:** code generation paths (Breeder, Alchemist) always use the `default` tier regardless of
+`USE_MYTHOS`. Routing Mythos to auto-deploy generated agent code is out of scope given its
+demonstrated sandbox escape capability.
+
+All Claude API calls include exponential backoff retry (up to 6 attempts, starting at 2 s) on
+rate-limit errors, implemented in `ArgosAgent._api_call_with_retry()`.
 
 ---
 

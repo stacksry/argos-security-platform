@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -25,6 +26,57 @@ from typing import Any
 
 import anthropic
 import structlog
+
+# ---------------------------------------------------------------------------
+# Model routing
+# ---------------------------------------------------------------------------
+
+# Set CLAUDE_MODEL_ID to override the default analysis model (e.g. a Glasswing
+# partner model ID once access is granted).  All agents inherit this default.
+_DEFAULT_MODEL = os.environ.get("CLAUDE_MODEL_ID", "claude-opus-4-6")
+
+# Set CLAUDE_MYTHOS_MODEL_ID to the partner-specific Mythos endpoint once
+# Glasswing access is obtained.  Falls back to the default model when unset
+# so the platform runs correctly without Mythos access.
+_MYTHOS_MODEL = os.environ.get("CLAUDE_MYTHOS_MODEL_ID", _DEFAULT_MODEL)
+
+# Haiku for cheap, high-volume gating tasks (ranking, L1-L5 pre-screening).
+_HAIKU_MODEL = os.environ.get("CLAUDE_HAIKU_MODEL_ID", "claude-haiku-4-5-20251001")
+
+# Feature flag: set USE_MYTHOS=true to route deep-semantic tasks to Mythos.
+# When false (default), all tasks use the default model — safe for environments
+# without Glasswing partner access.
+_USE_MYTHOS: bool = os.environ.get("USE_MYTHOS", "false").lower() == "true"
+
+# Maximum attempts when the Claude API returns a rate-limit (429) response.
+_API_MAX_RETRIES = 6
+_API_RETRY_BASE_DELAY = 2.0  # seconds; doubles each attempt (2, 4, 8, 16, 32, 64)
+
+
+class ModelRouter:
+    """
+    Select the appropriate Claude model based on task type and feature flags.
+
+    Task tiers:
+      "deep_semantic"   — Mythos (if USE_MYTHOS=true); else default.
+                          For: validator, triage, novel-vuln-class identification.
+      "code_generation" — Default model (Opus-class).
+                          For: Breeder, Alchemist fix generation. Never use Mythos here —
+                          a model that can escape sandboxes must not auto-generate
+                          deployable agent code without elevated human review.
+      "gating"          — Haiku (cheap, high-volume pre-screening).
+                          For: file ranking, L1-L5 infrastructure/language gating.
+      "default"         — Default model for everything else.
+    """
+
+    @staticmethod
+    def select(task_type: str = "default") -> str:
+        if task_type == "deep_semantic" and _USE_MYTHOS:
+            return _MYTHOS_MODEL
+        if task_type == "gating":
+            return _HAIKU_MODEL
+        return _DEFAULT_MODEL
+
 
 # ---------------------------------------------------------------------------
 # Result container
@@ -93,7 +145,7 @@ class ArgosAgent(ABC):
     """
 
     name: str = "base"
-    model: str = "claude-opus-4-6"
+    model: str = _DEFAULT_MODEL
 
     def __init__(
         self,
@@ -126,6 +178,39 @@ class ArgosAgent(ABC):
     # ------------------------------------------------------------------
     # Claude helpers
     # ------------------------------------------------------------------
+
+    async def _api_call_with_retry(self, fn, loop: asyncio.AbstractEventLoop):
+        """
+        Run a synchronous Claude API call in the thread executor with exponential
+        backoff on rate-limit (429) errors.
+
+        Parameters
+        ----------
+        fn:
+            A zero-argument callable that performs the synchronous API call and
+            returns an anthropic.types.Message.
+        loop:
+            The running event loop (passed in to avoid calling get_event_loop
+            redundantly in callers).
+
+        Returns
+        -------
+        anthropic.types.Message
+        """
+        delay = _API_RETRY_BASE_DELAY
+        for attempt in range(1, _API_MAX_RETRIES + 1):
+            try:
+                return await loop.run_in_executor(None, fn)
+            except anthropic.RateLimitError:
+                if attempt == _API_MAX_RETRIES:
+                    raise
+                self.log.warning(
+                    "claude.rate_limited",
+                    attempt=attempt,
+                    retry_in_seconds=delay,
+                )
+                await asyncio.sleep(delay)
+                delay *= 2
 
     async def _call_claude(
         self,
@@ -178,7 +263,7 @@ class ArgosAgent(ABC):
             with self.client.messages.stream(**kwargs) as stream:
                 return stream.get_final_message()
 
-        response = await loop.run_in_executor(None, _stream)
+        response = await self._api_call_with_retry(_stream, loop)
 
         usage = response.usage
         tokens = (usage.input_tokens or 0) + (usage.output_tokens or 0)
@@ -247,7 +332,7 @@ class ArgosAgent(ABC):
                 with self.client.messages.stream(**kwargs) as s:
                     return s.get_final_message()
 
-            response = await loop.run_in_executor(None, _stream)
+            response = await self._api_call_with_retry(_stream, loop)
 
             usage = response.usage
             tokens = (usage.input_tokens or 0) + (usage.output_tokens or 0)

@@ -70,10 +70,15 @@ SELECT
 FROM agent_performance_log
 WHERE supervised = TRUE
 GROUP BY agent_name
-HAVING COUNT(*) >= 50
-   AND AVG(precision) > 0.90
+HAVING COUNT(*) >= 200
+   AND AVG(precision) > 0.95
    AND SUM(CASE WHEN promoted THEN 1 ELSE 0 END) = 0;
 """
+
+# Thresholds raised from (50 scans, >90% precision) to (200 scans, >95% precision)
+# because Mythos-generated agents are more capable — and therefore more capable of
+# embedding subtle, hard-to-detect behaviours that pass shallow quality checks.
+# Promotion still requires a separate human security review (see _promote_agents).
 
 _SQL_LOG_SPAWN = """
 INSERT INTO agent_spawned_log (agent_name, vuln_class, spawned_at, supervised)
@@ -172,12 +177,27 @@ class BreederAgent(ArgosAgent):
                     self.log.warning("breeder.codegen_failed", vuln_class=vuln_class)
                     continue
 
-                # ── 4. Validate syntax ────────────────────────────────────
+                # ── 4a. Validate syntax ───────────────────────────────────
                 if not _validate_python_syntax(agent_code):
                     self.log.error(
                         "breeder.syntax_invalid",
                         vuln_class=vuln_class,
                         agent_name=agent_name,
+                    )
+                    continue
+
+                # ── 4b. Structural safety check ───────────────────────────
+                # Blocks agents with unexpected network calls, unrestricted
+                # filesystem writes, or subprocess spawning — patterns that
+                # a highly capable model could use to embed subtle behaviours
+                # that pass quality metrics while doing unintended work.
+                safe, safety_reason = _structural_safety_check(agent_code)
+                if not safe:
+                    self.log.error(
+                        "breeder.structural_safety_failed",
+                        vuln_class=vuln_class,
+                        agent_name=agent_name,
+                        reason=safety_reason,
                     )
                     continue
 
@@ -340,8 +360,14 @@ class BreederAgent(ArgosAgent):
         self, conn: asyncpg.Connection, dry_run: bool = False
     ) -> list[str]:
         """
-        Promote supervised agents that have achieved >90% precision over 50+ scans
+        Promote supervised agents that have achieved >95% precision over 200+ scans
         to autonomous mode.
+
+        Promotion is blocked unless the agent has a corresponding row in
+        agent_security_review_log with review_approved=TRUE.  This mandatory
+        human security review gate exists because Mythos-generated agents are
+        highly capable and could embed non-obvious behaviours that pass quality
+        metrics.  The review requirement cannot be bypassed by the Breeder itself.
         """
         promoted: list[str] = []
         try:
@@ -354,6 +380,18 @@ class BreederAgent(ArgosAgent):
             agent_name = row["agent_name"]
             avg_precision = float(row["avg_precision"])
             scan_count = int(row["scan_count"])
+
+            # Require explicit human security sign-off before promoting
+            review_approved = await self._has_security_review(conn, agent_name)
+            if not review_approved:
+                self.log.info(
+                    "breeder.promotion_blocked_pending_security_review",
+                    agent_name=agent_name,
+                    avg_precision=avg_precision,
+                    scan_count=scan_count,
+                )
+                continue
+
             self.log.info(
                 "breeder.promoting_agent",
                 agent_name=agent_name,
@@ -374,6 +412,30 @@ class BreederAgent(ArgosAgent):
             promoted.append(agent_name)
         return promoted
 
+    async def _has_security_review(
+        self, conn: asyncpg.Connection, agent_name: str
+    ) -> bool:
+        """Return True if a human security reviewer has approved this agent for promotion."""
+        try:
+            row = await conn.fetchrow(
+                """
+                SELECT review_approved FROM agent_security_review_log
+                WHERE agent_name = $1
+                ORDER BY reviewed_at DESC
+                LIMIT 1
+                """,
+                agent_name,
+            )
+            return bool(row and row["review_approved"])
+        except Exception as exc:  # noqa: BLE001
+            self.log.warning(
+                "breeder.security_review_check_failed",
+                agent_name=agent_name,
+                error=str(exc),
+            )
+            # Fail closed: if we can't confirm a review, block promotion
+            return False
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -387,6 +449,79 @@ def _validate_python_syntax(code: str) -> bool:
     except SyntaxError as exc:
         logger.warning("breeder.syntax_error", error=str(exc))
         return False
+
+
+def _structural_safety_check(code: str) -> tuple[bool, str]:
+    """
+    Walk the AST to detect patterns that should never appear in a generated
+    scanner agent:
+      - Network calls: socket, urllib, requests, httpx, aiohttp, boto3, etc.
+      - Unrestricted subprocess spawning: subprocess, os.system, os.popen
+      - Filesystem writes outside designated paths: open(..., 'w'), Path.write_*
+        imported from outside the argos package
+
+    Returns (safe: bool, reason: str).  reason is "" when safe=True.
+
+    Note: this is a defence-in-depth lint, not a complete security sandbox.
+    It catches obvious violations quickly; the mandatory human security review
+    gate is the primary control for subtle cases.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False, "syntax_error"
+
+    # Import-level checks: flag suspicious top-level imports
+    _BLOCKED_MODULES = {
+        "socket", "ssl", "urllib", "urllib2", "urllib3",
+        "requests", "httpx", "aiohttp", "boto3", "botocore",
+        "paramiko", "ftplib", "smtplib", "imaplib", "poplib",
+        "subprocess", "pty", "pexpect",
+    }
+
+    # Attribute-call checks: flag os.system, os.popen, os.execv*, etc.
+    _BLOCKED_OS_ATTRS = {"system", "popen", "execv", "execve", "execvp", "spawnl", "fork"}
+
+    for node in ast.walk(tree):
+        # Block dangerous module imports
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = ""
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module = alias.name.split(".")[0]
+                    if module in _BLOCKED_MODULES:
+                        return False, f"blocked_import:{module}"
+            else:
+                module = (node.module or "").split(".")[0]
+                if module in _BLOCKED_MODULES:
+                    return False, f"blocked_import:{module}"
+
+        # Block os.system / os.popen / os.exec* calls
+        if isinstance(node, ast.Attribute):
+            if (
+                isinstance(node.value, ast.Name)
+                and node.value.id == "os"
+                and node.attr in _BLOCKED_OS_ATTRS
+            ):
+                return False, f"blocked_os_call:os.{node.attr}"
+
+        # Block open() calls with write modes outside /tmp or designated output dirs
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "open":
+                # Check for write-mode argument
+                mode_arg = None
+                if len(node.args) >= 2:
+                    mode_arg = node.args[1]
+                else:
+                    for kw in node.keywords:
+                        if kw.arg == "mode":
+                            mode_arg = kw.value
+                if mode_arg and isinstance(mode_arg, ast.Constant):
+                    if any(m in str(mode_arg.value) for m in ("w", "a", "x")):
+                        return False, "unrestricted_file_write:open()"
+
+    return True, ""
 
 
 def _strip_code_fences(text: str) -> str:
